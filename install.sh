@@ -1,68 +1,180 @@
 #!/bin/sh
-# 安装 goxctl 核心，零 Go 依赖（下载预编译二进制）。
-# 用法：curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl/main/install.sh | sh [-s -- <version>]
-set -eu
+# shellcheck disable=SC3043
+# goxctl installer — downloads the prebuilt binary, no Go required.
+# Usage: curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl/main/install.sh | sh [-s -- [options]]
+set -u
 
-CORE_REPO="chinayin/goxctl"
+GITHUB_REPO="chinayin/goxctl"
+BINARY_NAME="goxctl"
 INSTALL_DIR="${GOXCTL_BIN_DIR:-$HOME/.goxctl/bin}"
-VERSION="${1:-latest}"
 
-# 平台探测（仅支持 macOS / Linux，amd64 / arm64）
-os=$(uname -s | tr '[:upper:]' '[:lower:]')
-arch=$(uname -m)
-case "$arch" in
-	x86_64 | amd64) arch=amd64 ;;
-	aarch64 | arm64) arch=arm64 ;;
-	*) echo "不支持的架构: $arch" >&2; exit 1 ;;
-esac
-case "$os" in
-	darwin | linux) ;;
-	*) echo "不支持的系统: $os（install.sh 仅支持 macOS/Linux）" >&2; exit 1 ;;
-esac
+# --- terminal detection ---
 
-fetch() { # url dest
-	if command -v curl >/dev/null 2>&1; then
-		curl -sSfL "$1" -o "$2"
-	else
-		wget -qO "$2" "$1"
+_use_color=false
+if [ -t 2 ]; then
+	if [ "${TERM+set}" = 'set' ]; then
+		case "$TERM" in
+			xterm* | rxvt* | urxvt* | linux* | vt* | screen* | tmux*) _use_color=true ;;
+		esac
+	fi
+fi
+
+info() {
+	if $_use_color; then printf '\033[32minfo\033[0m: %s\n' "$1" >&2; else printf 'info: %s\n' "$1" >&2; fi
+}
+warn() {
+	if $_use_color; then printf '\033[33mwarn\033[0m: %s\n' "$1" >&2; else printf 'warn: %s\n' "$1" >&2; fi
+}
+err() {
+	if $_use_color; then printf '\033[31merror\033[0m: %s\n' "$1" >&2; else printf 'error: %s\n' "$1" >&2; fi
+}
+
+need_cmd() {
+	if ! command -v "$1" > /dev/null 2>&1; then
+		err "required command not found: $1"
+		exit 1
 	fi
 }
 
+# --- downloader (curl/wget with TLS enforcement) ---
+
+_downloader=""
+
+detect_downloader() {
+	if command -v curl > /dev/null 2>&1; then
+		_downloader=curl
+	elif command -v wget > /dev/null 2>&1; then
+		_downloader=wget
+	else
+		err "either curl or wget is required"
+		exit 1
+	fi
+}
+
+download() { # url output
+	if [ "$_downloader" = curl ]; then
+		curl --proto '=https' --tlsv1.2 -sSfL "$1" -o "$2"
+	else
+		wget --https-only --secure-protocol=TLSv1_2 -q "$1" -O "$2"
+	fi
+}
+
+# --- platform detection ---
+
+get_target() {
+	local _os _arch
+	_os="$(uname -s)"
+	case "$_os" in
+		Darwin) _os=darwin ;;
+		Linux) _os=linux ;;
+		*) err "unsupported OS: $_os (only macOS/Linux are supported)"; exit 1 ;;
+	esac
+	_arch="$(uname -m)"
+	case "$_arch" in
+		x86_64 | x86-64 | x64 | amd64) _arch=amd64 ;;
+		aarch64 | arm64) _arch=arm64 ;;
+		*) err "unsupported architecture: $_arch (only amd64/arm64)"; exit 1 ;;
+	esac
+	echo "${_os}_${_arch}"
+}
+
+# --- release URL (asset names carry no version, so latest uses a stable URL) ---
+
+release_base() { # version -> base url
+	local _v="$1"
+	if [ -z "$_v" ]; then
+		echo "https://github.com/${GITHUB_REPO}/releases/latest/download"
+		return
+	fi
+	case "$_v" in v*) ;; *) _v="v${_v}" ;; esac
+	echo "https://github.com/${GITHUB_REPO}/releases/download/${_v}"
+}
+
 sha256_of() { # file -> sha
-	if command -v sha256sum >/dev/null 2>&1; then
+	if command -v sha256sum > /dev/null 2>&1; then
 		sha256sum "$1" | awk '{print $1}'
 	else
 		shasum -a 256 "$1" | awk '{print $1}'
 	fi
 }
 
-asset_url() { # asset -> url
-	if [ "$VERSION" = latest ]; then
-		echo "https://github.com/$CORE_REPO/releases/latest/download/$1"
-	else
-		echo "https://github.com/$CORE_REPO/releases/download/$VERSION/$1"
-	fi
+usage() {
+	printf '%s\n' \
+		"goxctl installer" \
+		"" \
+		"Usage:" \
+		"  curl -sSfL .../install.sh | sh -s -- [options]" \
+		"" \
+		"Options:" \
+		"  --version=VER   Version to install (default: latest)" \
+		"  --proxy=URL     HTTPS proxy for downloads" \
+		"  --dir=PATH      Install directory (default: ~/.goxctl/bin)" \
+		"  --help          Show this help"
 }
 
-asset="goxctl_${os}_${arch}.tar.gz"
-tmp=$(mktemp -d)
-echo "下载 goxctl ($VERSION, $os/$arch) ..."
-fetch "$(asset_url "$asset")" "$tmp/$asset"
-fetch "$(asset_url checksums.txt)" "$tmp/checksums.txt"
+main() {
+	detect_downloader
+	need_cmd uname
+	need_cmd mktemp
+	need_cmd tar
+	need_cmd awk
 
-want=$(grep " $asset\$" "$tmp/checksums.txt" | awk '{print $1}')
-got=$(sha256_of "$tmp/$asset")
-if [ -z "$want" ] || [ "$want" != "$got" ]; then
-	echo "校验失败: $asset" >&2
-	exit 1
-fi
+	local _version="" _proxy=""
+	for arg in "$@"; do
+		case "$arg" in
+			--version=*) _version="${arg#*=}" ;;
+			--proxy=*) _proxy="${arg#*=}" ;;
+			--dir=*) INSTALL_DIR="${arg#*=}" ;;
+			--help | -h) usage; exit 0 ;;
+			*) warn "unknown argument: $arg" ;;
+		esac
+	done
 
-mkdir -p "$INSTALL_DIR"
-tar -xzf "$tmp/$asset" -C "$INSTALL_DIR" goxctl
-chmod +x "$INSTALL_DIR/goxctl"
-rm -rf "$tmp"
+	if [ -n "$_proxy" ]; then
+		export https_proxy="$_proxy" http_proxy="$_proxy" HTTPS_PROXY="$_proxy" HTTP_PROXY="$_proxy"
+		info "using proxy: $_proxy"
+	fi
 
-echo
-echo "完成。若 goxctl 不在 PATH，请加入："
-echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
-echo "试试：goxctl version"
+	local _target _base _asset
+	_target=$(get_target)
+	_base=$(release_base "$_version")
+	_asset="${BINARY_NAME}_${_target}.tar.gz"
+	info "target: $_target"
+
+	# _tmpdir must be global: the EXIT trap fires after main returns, when a
+	# local would already be out of scope and trip `set -u`.
+	_tmpdir=$(mktemp -d) || { err "failed to create temp directory"; exit 1; }
+	trap 'if [ -n "${_tmpdir:-}" ]; then rm -rf "$_tmpdir"; fi' EXIT INT TERM
+
+	info "downloading ${_asset}..."
+	if ! download "${_base}/${_asset}" "${_tmpdir}/${_asset}"; then
+		err "download failed: ${_base}/${_asset}"
+		exit 1
+	fi
+	if ! download "${_base}/checksums.txt" "${_tmpdir}/checksums.txt"; then
+		err "failed to download checksums.txt"
+		exit 1
+	fi
+
+	info "verifying checksum..."
+	local _want _got
+	_want=$(awk -v f="$_asset" '$2 == f {print $1}' "${_tmpdir}/checksums.txt")
+	_got=$(sha256_of "${_tmpdir}/${_asset}")
+	if [ -z "$_want" ] || [ "$_want" != "$_got" ]; then
+		err "checksum verification failed for ${_asset}"
+		exit 1
+	fi
+
+	mkdir -p "$INSTALL_DIR"
+	tar -xzf "${_tmpdir}/${_asset}" -C "$INSTALL_DIR" "$BINARY_NAME"
+	chmod 755 "${INSTALL_DIR}/${BINARY_NAME}"
+	info "installed: ${INSTALL_DIR}/${BINARY_NAME}"
+
+	case ":${PATH}:" in
+		*":${INSTALL_DIR}:"*) ;;
+		*) warn "add to PATH: export PATH=\"${INSTALL_DIR}:\$PATH\"" ;;
+	esac
+	info "done — try: goxctl version"
+}
+
+main "$@"
