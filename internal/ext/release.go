@@ -17,6 +17,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/chinayin/goxctl/internal/debug"
 )
 
 const (
@@ -68,8 +70,10 @@ func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version s
 
 	bin, sum := pickAssets(rel.Assets, ref.repo)
 	if bin.URL == "" {
+		debug.Logf("no prebuilt asset matching %s_%s_%s", ref.repo, runtime.GOOS, runtime.GOARCH)
 		return errNoBinaryRelease
 	}
+	debug.Logf("matched asset: %s", bin.Name)
 
 	data, err := httpGet(ctx, client, bin.URL)
 	if err != nil {
@@ -85,6 +89,7 @@ func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version s
 		return fmt.Errorf("ext: mkdir %q: %w", m.dir, err)
 	}
 	dest := filepath.Join(m.dir, ref.repo) // 二进制名即 repo（goxctl-<name>），与 Find 一致
+	debug.Logf("installing prebuilt binary -> %s", dest)
 	return extractBinary(data, ref.repo, dest)
 }
 
@@ -101,6 +106,7 @@ func (m *Manager) fetchRelease(ctx context.Context, client *http.Client, ref rep
 		url = fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s", base, ref.owner, ref.repo, version)
 	}
 
+	debug.Logf("querying release: %s", url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("ext: build release request: %w", err)

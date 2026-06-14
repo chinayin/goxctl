@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/chinayin/goxctl/internal/debug"
 )
 
 // dirName 是 extension 默认安装目录（相对用户主目录）。
-const dirName = ".goxctl/extensions"
+const dirName = ".gox/extensions"
 
 // binPrefix 是 extension 可执行文件名前缀。
 const binPrefix = "goxctl-"
@@ -30,7 +32,7 @@ type Manager struct {
 	apiBase string // GitHub API 基址（空=默认，主要供测试注入）
 }
 
-// NewManager 用默认目录（~/.goxctl/extensions）创建 Manager。
+// NewManager 用默认目录（~/.gox/extensions）创建 Manager。
 func NewManager() (*Manager, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -60,6 +62,7 @@ func (m *Manager) Dispatch(ctx context.Context, name string, args []string) erro
 	if err != nil {
 		return err
 	}
+	debug.Logf("exec %s %v", bin, args)
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -73,9 +76,11 @@ func (m *Manager) Dispatch(ctx context.Context, name string, args []string) erro
 // modulePath 为扩展仓库的 module 路径（如 github.com/<owner>/goxctl-<name>）；version 缺省 latest。
 func (m *Manager) Install(ctx context.Context, modulePath, version string) error {
 	modulePath = ensureHost(modulePath)
+	debug.Logf("install module=%q version=%q", modulePath, version)
 
 	// 优先安装预编译二进制（无需 Go 环境）
 	if ref, ok := parseModule(modulePath); ok {
+		debug.Logf("resolved owner=%s repo=%s", ref.owner, ref.repo)
 		err := m.installFromRelease(ctx, ref, version)
 		if err == nil {
 			return nil
@@ -92,7 +97,7 @@ func (m *Manager) Install(ctx context.Context, modulePath, version string) error
 // 按团队约定扩展入口在 <module>/cmd/<repo名>，据此推导 go install 目标。
 func (m *Manager) installViaGo(ctx context.Context, modulePath, version string) error {
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("ext: %q 无匹配当前平台的预编译二进制，且本机未安装 go 无法源码安装", modulePath)
+		return fmt.Errorf("ext: no prebuilt binary for this platform and go is not installed: %s", modulePath)
 	}
 	if version == "" {
 		version = "latest"
@@ -102,6 +107,7 @@ func (m *Manager) installViaGo(ctx context.Context, modulePath, version string) 
 	}
 
 	installPath := modulePath + "/cmd/" + path.Base(modulePath)
+	debug.Logf("falling back to: go install %s@%s", installPath, version)
 	//nolint:gosec // 安装扩展即转发 go install，module path 由用户显式提供，是本工具的设计意图
 	cmd := exec.CommandContext(ctx, "go", "install", installPath+"@"+version)
 	cmd.Env = append(os.Environ(), "GOBIN="+m.dir)

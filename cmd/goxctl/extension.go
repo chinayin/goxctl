@@ -10,15 +10,21 @@ import (
 var extensionCmd = &cobra.Command{
 	Use:     "extension",
 	Aliases: []string{"ext"},
-	Short:   "管理 goxctl 扩展",
+	Short:   "Manage goxctl extensions",
 }
 
 var extInstallCmd = &cobra.Command{
 	Use:   "install <module> [version]",
-	Short: "用 go install 安装扩展到 ~/.goxctl/extensions",
-	Long:  "用 go install 安装扩展到 ~/.goxctl/extensions。\n\nmodule 可简写为 owner/repo（默认 github.com）；按约定从 <module>/cmd/<repo名> 安装。",
-	Args:  cobra.RangeArgs(1, 2),
+	Short: "Install an extension into ~/.gox/extensions",
+	Long: `Install an extension into ~/.gox/extensions.
+
+Prefers a prebuilt binary from the extension's GitHub Releases (no Go required),
+and falls back to "go install" when no binary matches the current platform.
+
+<module> may be shortened to owner/repo (host defaults to github.com).`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true // 进入业务逻辑后，错误不再是用法问题
 		m, err := ext.NewManager()
 		if err != nil {
 			return err
@@ -33,9 +39,10 @@ var extInstallCmd = &cobra.Command{
 
 var extListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "列出已安装扩展",
+	Short: "List installed extensions",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		m, err := ext.NewManager()
 		if err != nil {
 			return err
@@ -59,9 +66,10 @@ var extListCmd = &cobra.Command{
 
 var extRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
-	Short: "删除已安装扩展",
+	Short: "Remove an installed extension",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		m, err := ext.NewManager()
 		if err != nil {
 			return err

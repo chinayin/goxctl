@@ -6,7 +6,7 @@ set -u
 
 GITHUB_REPO="chinayin/goxctl"
 BINARY_NAME="goxctl"
-INSTALL_DIR="${GOXCTL_BIN_DIR:-$HOME/.goxctl/bin}"
+INSTALL_DIR="${GOXCTL_BIN_DIR:-$HOME/.gox/bin}"
 
 # --- terminal detection ---
 

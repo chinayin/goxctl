@@ -32,8 +32,8 @@
 本体布局遵循团队 cli.md：入口 `cmd/goxctl/main.go`，命令在 `cmd/goxctl/`（root/extension/version/registry），核心逻辑在 `internal/ext/`。
 
 - 内置子命令：`extension install/list/remove`、`version`、`help`。
-- **转发**：未知子命令 → 查 `~/.goxctl/extensions/goxctl-<name>`（或 PATH）→ `exec` 并继承 stdio。
-- **安装**（`extension install <module>`）：**优先下载与当前平台匹配的预编译二进制**（GitHub Release 资产，无需 Go 环境），无匹配时回退 `go install`（需本机有 go 工具链）。装到 `~/.goxctl/extensions`，二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。机制详见 §5。
+- **转发**：未知子命令 → 查 `~/.gox/extensions/goxctl-<name>`（或 PATH）→ `exec` 并继承 stdio。
+- **安装**（`extension install <module>`）：**优先下载与当前平台匹配的预编译二进制**（GitHub Release 资产，无需 Go 环境），无匹配时回退 `go install`（需本机有 go 工具链）。装到 `~/.gox/extensions`，二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。机制详见 §5。
 - `extension list`：列已装扩展；`extension remove <name>`：删除。
 
 ### 4.1 未装扩展的提示（已知扩展注册表）
@@ -64,7 +64,7 @@
 curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl-claude/main/install.sh | sh
 ```
 
-`install.sh` 探测 `uname` → 下载对应平台 tar.gz → 校验 sha256 → 解压到 `~/.goxctl/bin`（可用 `GOXCTL_BIN_DIR` 覆盖，脚本提示加入 PATH）。全程无 Go。装好核心后由核心安装扩展。
+`install.sh` 探测 `uname` → 下载对应平台 tar.gz → 校验 sha256 → 解压到 `~/.gox/bin`（可用 `GOXCTL_BIN_DIR` 覆盖，脚本提示加入 PATH）。全程无 Go。装好核心后由核心安装扩展。
 
 ### 5.3 extension install：二进制优先，go install 回退
 
@@ -72,7 +72,7 @@ curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl-claude/main/install
 install <owner/repo> [version]：
   1. 查 GitHub Release（tag 或 latest）
   2. 找匹配 <repo>_<os>_<arch>.tar.gz 的资产
-     ├─ 命中 → 下载 + 校验 sha256 + 解压 → ~/.goxctl/extensions/goxctl-<name>   （无需 Go）
+     ├─ 命中 → 下载 + 校验 sha256 + 解压 → ~/.gox/extensions/goxctl-<name>   （无需 Go）
      └─ 未命中 ↓
   3. 本机有 go → 回退 go install（开发者便捷路径）
   4. 都不行 → 报错：无预编译二进制且本机无 go
@@ -85,5 +85,5 @@ install <owner/repo> [version]：
 
 ## 6. 开放问题（待定）
 
-- extension 发现目录 `~/.goxctl/extensions/` vs 复用 PATH（当前两者皆查，优先安装目录）。
+- extension 发现目录 `~/.gox/extensions/` vs 复用 PATH（当前两者皆查，优先安装目录）。
 - 注册表后续是否需要从写死 map 升级为远程 extension index（取决于扩展数量增长）。
