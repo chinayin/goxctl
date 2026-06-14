@@ -1,0 +1,198 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    # Core linters
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Code quality
+    - gocritic
+    - revive
+    - unconvert
+    - misspell
+    - whitespace
+    # Complexity
+    - gocyclo
+    - gocognit
+    - nestif
+    # Security
+    - gosec
+    # Bug detection
+    - copyloopvar
+    - nilerr
+    - nilnil
+    # Performance
+    - prealloc
+    # Standards
+    - nolintlint
+    - errname
+    - errorlint
+    # Team specific
+    - tagliatelle
+    - sloglint     # rules.md: 业务代码统一 log/slog
+    - testifylint  # rules.md: 测试统一 testify
+    - noctx        # rules.md: 外部调用必须带 context/timeout
+    - intrange     # Go 1.22+: for i := range n
+  settings:
+    # ========== 错误处理 ==========
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (io.ReadCloser).Close
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - fmt.Print
+    # ========== 静态分析 ==========
+    # enable-all 自动跟进新版 govet 的 analyzer，避免手工枚举滞后
+    govet:
+      enable-all: true
+      disable:
+        - shadow
+        - fieldalignment
+
+    # ========== 复杂度（中等严格）==========
+    gocyclo:
+      min-complexity: 15    # 与 Gin/Echo 一致
+
+    gocognit:
+      min-complexity: 20    # 认知复杂度
+
+    nestif:
+      min-complexity: 4     # 最多 4 层嵌套
+
+    # ========== 拼写检查 ==========
+    misspell:
+      locale: US
+      ignore-rules:
+        - chinayin
+        - uhomes
+        - gox
+
+    # ========== 代码风格（中等严格）==========
+    revive:
+      enable-all-rules: false
+      rules:
+        # 检查bug
+        - name: atomic
+        - name: context-keys-type
+        - name: defer
+          arguments: [[ "immediate-recover", "recover", "return" ]]
+        - name: duplicated-imports
+        - name: errorf
+        - name: string-of-int
+        - name: time-equal
+        - name: unconditional-recursion
+        - name: useless-break
+        - name: waitgroup-by-value
+        # 代码风格
+        - name: error-return
+          severity: warning
+          disabled: false
+        - name: error-strings
+          severity: warning
+          disabled: false
+        - name: receiver-naming
+          severity: warning
+          disabled: false
+        # 变量风格
+        - name: var-naming
+          severity: warning
+          disabled: false
+        # 严格风格
+        - name: exported
+          severity: warning
+          disabled: false
+        - name: package-comments
+          severity: warning
+          disabled: false
+          arguments:
+            - disableStutteringCheck
+
+    # ========== 代码质量 ==========
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - whyNoLint      # 要求解释 nolint 原因（可选）
+        - hugeParam      # 参数大小检查（太严格）
+        - rangeValCopy   # range 复制检查（太严格）
+
+    # ========== 安全检查 ==========
+    gosec:
+      excludes:
+        - G104
+      config:
+        global:
+          nosec: false
+          show-ignored: false
+          audit: false
+
+    # ========== 规范：JSON tag 命名（重要！）==========
+    tagliatelle:
+      case:
+        rules:
+          json: snake           # JSON 必须 snake_case
+          yaml: snake           # YAML 必须 snake_case
+          mapstructure: snake   # Mapstructure 必须 snake_case
+        use-field-name: false
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - errcheck
+          - gocritic
+          - gocyclo
+          - gocognit
+          - nestif
+          - gosec # 测试常用 httptest mock / 临时文件，gosec 多为误报
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofmt:
+      # 自动将 interface{} 替换为 any（Go 1.18+）
+      rewrite-rules:
+        - pattern: interface{}
+          replacement: any
+    gofumpt:
+      # 启用额外的简化规则
+      extra-rules: true
+  exclusions:
+    # 对自动生成的代码（generated files）采取 宽松模式（lax）
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
