@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 	Long: `goxctl 是 gox 生态的命令分发器：内置 extension 管理，
 其余子命令转发给独立的 goxctl-<name> 扩展（gh/git 风格）。
 
-例如 goxctl claude update 会转发给 goxctl-claude 扩展。`,
+例如 goxctl <name> ... 会转发给 goxctl-<name> 扩展。`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

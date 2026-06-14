@@ -18,6 +18,9 @@ const dirName = ".goxctl/extensions"
 // binPrefix 是 extension 可执行文件名前缀。
 const binPrefix = "goxctl-"
 
+// defaultHost 是 module 简写（owner/repo）缺省补全的代码托管主机名。
+const defaultHost = "github.com"
+
 // ErrNotFound 表示未找到指定 extension。
 var ErrNotFound = errors.New("ext: extension not found")
 
@@ -65,7 +68,7 @@ func (m *Manager) Dispatch(ctx context.Context, name string, args []string) erro
 
 // Install 用 go install 把 extension 装到安装目录（GOBIN 指向该目录）。
 //
-// modulePath 为扩展仓库的 module 路径（如 github.com/chinayin/goxctl-claude），
+// modulePath 为扩展仓库的 module 路径（如 github.com/<owner>/goxctl-<name>），
 // 按团队约定其入口在 <module>/cmd/<repo名>，据此推导 go install 目标；version 缺省 latest。
 func (m *Manager) Install(ctx context.Context, modulePath, version string) error {
 	modulePath = ensureHost(modulePath)
@@ -128,11 +131,11 @@ func isExecutable(p string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-// ensureHost 为缺少主机名的 module 路径补默认 github.com，
-// 与 claude add 的 source 简写（owner/repo）保持一致。
+// ensureHost 为缺少主机名的 module 路径补默认 host（defaultHost），
+// 让 extension install 支持 owner/repo 简写。
 func ensureHost(modulePath string) string {
 	if first, _, _ := strings.Cut(modulePath, "/"); !strings.Contains(first, ".") {
-		return "github.com/" + modulePath
+		return defaultHost + "/" + modulePath
 	}
 	return modulePath
 }
