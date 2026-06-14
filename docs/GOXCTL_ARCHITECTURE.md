@@ -69,7 +69,7 @@ goxctl-claude/
 | 命令 | 作用 |
 |---|---|
 | `goxctl claude add <source>` | 首次添加规范源并拉取（写 manifest + lock） |
-| `goxctl claude update [version]` | 无参=拉到 lock 锁定版本（新 clone 恢复 / CI 校正，幂等）；带版本 / `--latest`=升级并改 lock |
+| `goxctl claude update [version]` | 无参=拉到 lock 锁定版本（新 clone 恢复 / CI 校正，幂等）；带版本=升级到该 tag 并改 lock |
 | `goxctl claude remove` | 移除受管文件 + 清 manifest/lock |
 | `goxctl claude list` | 显示源 / 版本 / 受管文件 |
 | `goxctl claude check` | 校验受管 digest == lock（CI 防漂移） |
@@ -77,7 +77,7 @@ goxctl-claude/
 ### 5.3 manifest `.goxctl-claude.yaml`（进 git）
 ```yaml
 source: github.com/chinayin/goxctl-claude
-version: ^1.0              # 精确 tag 或语义范围
+version: v1.0.0            # 精确 tag（不支持语义范围）
 paths: [ steering/ ]       # 按目录/glob，新增规范文件自动带上
 target: .kiro/steering     # 落地目录（Kiro + Claude Code 共用）
 ```
