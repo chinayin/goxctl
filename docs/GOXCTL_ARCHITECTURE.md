@@ -33,7 +33,7 @@
 
 - 内置子命令：`extension install/list/remove`、`version`、`help`。
 - **转发**：未知子命令 → 查 `~/.goxctl/extensions/goxctl-<name>`（或 PATH）→ `exec` 并继承 stdio。
-- **安装**（`extension install <module>`）：用 `go install` 装到 `~/.goxctl/extensions`（`GOBIN` 指向该目录），而非下载预编译二进制——扩展都是 Go 程序，go install 最简。按团队约定扩展入口在 `<module>/cmd/<repo名>`，据此推导 go install 目标；产出的二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。
+- **安装**（`extension install <module>`）：**优先下载与当前平台匹配的预编译二进制**（GitHub Release 资产，无需 Go 环境），无匹配时回退 `go install`（需本机有 go 工具链）。装到 `~/.goxctl/extensions`，二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。机制详见 §5。
 - `extension list`：列已装扩展；`extension remove <name>`：删除。
 
 ### 4.1 未装扩展的提示（已知扩展注册表）
@@ -47,14 +47,40 @@
 - 新增官方扩展时在 `knownExtensions` 登记一行。将来扩展增多，可平滑升级为远程 extension index（az 模式）。
 - 取舍：相比 git/docker/gh 的"未知即报错"，这给了 az 式的安装指引，降低摩擦；写死 map 避免引入远程索引的复杂度。
 
-## 5. 安装与引导
+## 5. 分发与安装（零 Go 依赖）
+
+核心目标：**没有 Go 环境的人也能装、能用**（前端 / 运维 / CI / Kiro 用户）。对齐 gh / krew —— 预编译二进制为主，源码编译仅作开发者回退。
+
+### 5.1 二进制分发（goreleaser）
+
+- 核心与各扩展各自用 `.goreleaser.yaml` + `release.yml`（push tag `v*` 触发）构建多平台二进制，发布到自己的 GitHub Releases。
+- 平台矩阵：macOS / Linux × amd64 / arm64（4 个二进制）。
+- 产物命名**不含版本号**：`<name>_<os>_<arch>.tar.gz` + `checksums.txt`（sha256）。不含版本是为了让安装脚本能用稳定的 `releases/latest/download/<asset>` 直链，下载端也只需按 `_<os>_<arch>.tar.gz` 后缀匹配。
+- `os`/`arch` 取值与 Go 的 `runtime.GOOS`/`GOARCH` 一致（`darwin`/`linux`、`amd64`/`arm64`），下载端直接拼接。
+
+### 5.2 安装核心（install.sh，不碰 go）
 
 ```bash
-# 已有核心：module 路径可写全，也可简写 owner/repo（无 host 默认补 github.com）
-goxctl extension install <owner>/<repo>
+curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl-claude/main/install.sh | sh
 ```
 
-- `extension install` 的 module 简写规则（`owner/repo` → 补 `github.com`）由 `ensureHost` 处理；各扩展若自身的命令也接受 source 简写，应保持同一规则以求对称。
+`install.sh` 探测 `uname` → 下载对应平台 tar.gz → 校验 sha256 → 解压到 `~/.goxctl/bin`（可用 `GOXCTL_BIN_DIR` 覆盖，脚本提示加入 PATH）。全程无 Go。装好核心后由核心安装扩展。
+
+### 5.3 extension install：二进制优先，go install 回退
+
+```
+install <owner/repo> [version]：
+  1. 查 GitHub Release（tag 或 latest）
+  2. 找匹配 <repo>_<os>_<arch>.tar.gz 的资产
+     ├─ 命中 → 下载 + 校验 sha256 + 解压 → ~/.goxctl/extensions/goxctl-<name>   （无需 Go）
+     └─ 未命中 ↓
+  3. 本机有 go → 回退 go install（开发者便捷路径）
+  4. 都不行 → 报错：无预编译二进制且本机无 go
+```
+
+- release 流程的真实错误（网络、404 以外的状态、校验失败）直接上报，不静默回退，避免掩盖问题；仅"无该 release / 无匹配资产"才回退 go install。
+- 公开仓库匿名下载，无需 token。
+- `module` 简写规则（`owner/repo` → 补 `github.com`）由 `ensureHost` 处理；各扩展若自身命令也接受 source 简写，应保持同一规则以求对称。
 - 对外心智一律 `goxctl <name> …`，`goxctl-<name>` 二进制不直接对用户宣传。
 
 ## 6. 开放问题（待定）

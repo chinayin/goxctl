@@ -26,7 +26,8 @@ var ErrNotFound = errors.New("ext: extension not found")
 
 // Manager 管理 extension 的发现、转发、安装、列举与删除。
 type Manager struct {
-	dir string // extension 安装目录
+	dir     string // extension 安装目录
+	apiBase string // GitHub API 基址（空=默认，主要供测试注入）
 }
 
 // NewManager 用默认目录（~/.goxctl/extensions）创建 Manager。
@@ -66,12 +67,33 @@ func (m *Manager) Dispatch(ctx context.Context, name string, args []string) erro
 	return cmd.Run()
 }
 
-// Install 用 go install 把 extension 装到安装目录（GOBIN 指向该目录）。
+// Install 安装 extension 到安装目录：优先下载与当前平台匹配的预编译二进制
+// （无需 Go 环境），无匹配时回退 go install（需本机有 go 工具链）。
 //
-// modulePath 为扩展仓库的 module 路径（如 github.com/<owner>/goxctl-<name>），
-// 按团队约定其入口在 <module>/cmd/<repo名>，据此推导 go install 目标；version 缺省 latest。
+// modulePath 为扩展仓库的 module 路径（如 github.com/<owner>/goxctl-<name>）；version 缺省 latest。
 func (m *Manager) Install(ctx context.Context, modulePath, version string) error {
 	modulePath = ensureHost(modulePath)
+
+	// 优先安装预编译二进制（无需 Go 环境）
+	if ref, ok := parseModule(modulePath); ok {
+		err := m.installFromRelease(ctx, ref, version)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, errNoBinaryRelease) {
+			return err // release 流程真实错误（网络/校验），不静默回退
+		}
+		// 无匹配预编译二进制 → 回退 go install
+	}
+	return m.installViaGo(ctx, modulePath, version)
+}
+
+// installViaGo 用 go install 从源码安装（开发者回退路径，需本机有 go 工具链）。
+// 按团队约定扩展入口在 <module>/cmd/<repo名>，据此推导 go install 目标。
+func (m *Manager) installViaGo(ctx context.Context, modulePath, version string) error {
+	if _, err := exec.LookPath("go"); err != nil {
+		return fmt.Errorf("ext: %q 无匹配当前平台的预编译二进制，且本机未安装 go 无法源码安装", modulePath)
+	}
 	if version == "" {
 		version = "latest"
 	}
