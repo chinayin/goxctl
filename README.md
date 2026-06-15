@@ -8,7 +8,7 @@ gox 生态的可扩展命令行工具：本身只做**命令分发**与 **extens
 
 ```bash
 # 下载对应平台二进制，安装到 /usr/local/bin（默认在 PATH；不可写则回退 sudo）
-curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl/main/install.sh | sh
+curl -sSfL https://github.com/chinayin/goxctl/releases/latest/download/install.sh | sh
 ```
 
 开发者也可 `go install github.com/chinayin/goxctl/cmd/goxctl@latest`。

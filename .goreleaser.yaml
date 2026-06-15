@@ -30,3 +30,6 @@ release:
   github:
     owner: chinayin
     name: goxctl
+  # install.sh 作为 release 资产，curl 从 releases/latest/download/install.sh 拉取（不用 raw）
+  extra_files:
+    - glob: ./install.sh

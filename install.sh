@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck disable=SC3043
 # goxctl installer — downloads the prebuilt binary, no Go required.
-# Usage: curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl/main/install.sh | sh [-s -- [options]]
+# Usage: curl -sSfL https://github.com/chinayin/goxctl/releases/latest/download/install.sh | sh [-s -- [options]]
 set -u
 
 GITHUB_REPO="chinayin/goxctl"
