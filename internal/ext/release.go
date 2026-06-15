@@ -34,6 +34,9 @@ const (
 // 调用方据此回退到 go install。
 var errNoBinaryRelease = errors.New("ext: no prebuilt binary release")
 
+// apiBaseOverride 供测试注入 GitHub API base（SelfUpdate / LatestVersion 用）；空则走默认。
+var apiBaseOverride string
+
 // repoRef 是 owner/repo 引用。
 type repoRef struct {
 	owner string
@@ -63,7 +66,7 @@ type ghRelease struct {
 // 无匹配资产或无该 release 时返回 errNoBinaryRelease（让上层回退 go install）。
 func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version string) error {
 	client := &http.Client{Timeout: releaseTimeout}
-	rel, err := m.fetchRelease(ctx, client, ref, version)
+	rel, err := fetchRelease(ctx, client, m.apiBase, ref, version)
 	if err != nil {
 		return err
 	}
@@ -94,8 +97,9 @@ func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version s
 }
 
 // fetchRelease 取指定 tag 或 latest 的 release 元数据；404 视为无 release。
-func (m *Manager) fetchRelease(ctx context.Context, client *http.Client, ref repoRef, version string) (*ghRelease, error) {
-	base := m.apiBase
+// apiBase 为空时用默认 GitHub API（供 Manager 注入测试 server）。
+func fetchRelease(ctx context.Context, client *http.Client, apiBase string, ref repoRef, version string) (*ghRelease, error) {
+	base := apiBase
 	if base == "" {
 		base = defaultAPIBase
 	}
@@ -224,4 +228,68 @@ func httpGet(ctx context.Context, client *http.Client, url string) ([]byte, erro
 		return nil, fmt.Errorf("github status %d", resp.StatusCode)
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, maxAssetSize))
+}
+
+// LatestVersion 返回 modulePath 最新 release 的 tag（供 upgrade --check 比对，不下载二进制）。
+func LatestVersion(ctx context.Context, modulePath string) (string, error) {
+	ref, ok := parseModule(ensureHost(modulePath))
+	if !ok {
+		return "", fmt.Errorf("ext: invalid module %q", modulePath)
+	}
+	client := &http.Client{Timeout: releaseTimeout}
+	rel, err := fetchRelease(ctx, client, apiBaseOverride, ref, "")
+	if err != nil {
+		return "", err
+	}
+	return rel.TagName, nil
+}
+
+// SelfUpdate 下载 modulePath 最新 release 的当前平台二进制，原子替换 destPath（运行中的二进制）。
+// 返回更新到的版本 tag。destPath 所在目录不可写时返回提示 sudo 的错误。
+func SelfUpdate(ctx context.Context, modulePath, destPath string) (string, error) {
+	ref, ok := parseModule(ensureHost(modulePath))
+	if !ok {
+		return "", fmt.Errorf("ext: invalid module %q", modulePath)
+	}
+
+	// 先探测目标目录可写，给出明确的 sudo 提示
+	dir := filepath.Dir(destPath)
+	if probe, err := os.CreateTemp(dir, ".goxctl-upgrade-*"); err != nil {
+		return "", fmt.Errorf("ext: %s not writable; try: sudo goxctl upgrade", dir)
+	} else {
+		_ = probe.Close()
+		_ = os.Remove(probe.Name())
+	}
+
+	client := &http.Client{Timeout: releaseTimeout}
+	rel, err := fetchRelease(ctx, client, apiBaseOverride, ref, "")
+	if err != nil {
+		return "", err
+	}
+	bin, sum := pickAssets(rel.Assets, ref.repo)
+	if bin.URL == "" {
+		return "", fmt.Errorf("ext: no prebuilt binary for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	debug.Logf("self-update: matched asset %s (%s)", bin.Name, rel.TagName)
+
+	data, err := httpGet(ctx, client, bin.URL)
+	if err != nil {
+		return "", fmt.Errorf("ext: download %q: %w", bin.Name, err)
+	}
+	if sum.URL != "" {
+		if err := verifyChecksum(ctx, client, sum.URL, bin.Name, data); err != nil {
+			return "", err
+		}
+	}
+
+	// 原子替换：同目录写临时文件再 rename（Unix 原子，运行中进程继续用旧 inode）
+	tmp := destPath + ".new"
+	if err := extractBinary(data, ref.repo, tmp); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, destPath); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("ext: replace %q: %w", destPath, err)
+	}
+	return rel.TagName, nil
 }

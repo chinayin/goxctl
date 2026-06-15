@@ -89,7 +89,7 @@ func tryForward(ctx context.Context, args []string) (bool, error) {
 // isBuiltin 判断子命令是否由 goxctl 核心直接处理（不转发）。
 func isBuiltin(name string) bool {
 	switch name {
-	case "extension", "ext", "version", "help", "completion",
+	case "extension", "ext", "version", "upgrade", "help", "completion",
 		"-h", "--help", "-v", "--version":
 		return true
 	default:

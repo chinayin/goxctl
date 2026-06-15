@@ -78,6 +78,55 @@ var extRemoveCmd = &cobra.Command{
 	},
 }
 
+var extUpgradeAll bool
+
+var extUpgradeCmd = &cobra.Command{
+	Use:   "upgrade [name]",
+	Short: "Upgrade installed extensions to the latest release",
+	Long: `Reinstall extensions at their latest release.
+
+  goxctl extension upgrade <name>   upgrade one extension
+  goxctl extension upgrade --all    upgrade all installed extensions
+
+Only extensions in the known registry can be upgraded automatically; others were
+installed manually and should be reinstalled the same way.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		m, err := ext.NewManager()
+		if err != nil {
+			return err
+		}
+		out := cmd.OutOrStdout()
+
+		var names []string
+		switch {
+		case extUpgradeAll:
+			if names, err = m.List(); err != nil {
+				return err
+			}
+		case len(args) == 1:
+			names = []string{args[0]}
+		default:
+			return fmt.Errorf("ext: specify an extension name or --all")
+		}
+
+		for _, n := range names {
+			mod, ok := installHint(n)
+			if !ok {
+				fmt.Fprintf(out, "  skip %s (not in registry; reinstall manually)\n", n)
+				continue
+			}
+			if err := m.Install(cmd.Context(), mod, ""); err != nil {
+				return fmt.Errorf("ext: upgrade %s: %w", n, err)
+			}
+			fmt.Fprintf(out, "  upgraded %s\n", n)
+		}
+		return nil
+	},
+}
+
 func init() {
-	extensionCmd.AddCommand(extInstallCmd, extListCmd, extRemoveCmd)
+	extUpgradeCmd.Flags().BoolVar(&extUpgradeAll, "all", false, "upgrade all installed extensions")
+	extensionCmd.AddCommand(extInstallCmd, extListCmd, extRemoveCmd, extUpgradeCmd)
 }

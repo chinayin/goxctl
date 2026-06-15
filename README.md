@@ -4,10 +4,9 @@ gox 生态的可扩展命令行工具：本身只做**命令分发**与 **extens
 
 ## 安装
 
-预编译二进制，**无需 Go 环境**（macOS / Linux，amd64 / arm64）：
+预编译二进制，**无需 Go 环境**（macOS / Linux，amd64 / arm64）。安装到 `/usr/local/bin`（默认在 PATH；不可写则回退 sudo）：
 
 ```bash
-# 下载对应平台二进制，安装到 /usr/local/bin（默认在 PATH；不可写则回退 sudo）
 curl -sSfL https://github.com/chinayin/goxctl/releases/latest/download/install.sh | sh
 ```
 
@@ -17,10 +16,12 @@ curl -sSfL https://github.com/chinayin/goxctl/releases/latest/download/install.s
 
 ```bash
 goxctl version                            # 内置：版本
+goxctl upgrade                            # 自更新核心到最新 release（--check 只查不装）
 goxctl extension install <owner>/<repo>   # 安装扩展（优先预编译二进制，回退 go install）
 goxctl extension list                     # 列出已装扩展
-goxctl <name> ...                         # 转发给 goxctl-<name> 扩展
+goxctl extension upgrade <name>|--all     # 更新扩展到最新 release
 goxctl extension remove <name>            # 删除扩展
+goxctl <name> ...                         # 转发给 goxctl-<name> 扩展
 goxctl --verbose <name> ...               # 调试输出（等价 GOXCTL_DEBUG=1）
 ```
 

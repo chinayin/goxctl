@@ -135,6 +135,34 @@ func TestVerifyChecksum(t *testing.T) {
 	require.ErrorContains(t, verifyChecksum(context.Background(), c, srv.URL+"/good", "other.tar.gz", data), "not found")
 }
 
+func TestLatestVersion(t *testing.T) {
+	srv := newReleaseServer(t, "goxctl", makeTarGz(t, "goxctl", []byte("x")), false)
+	apiBaseOverride = srv.URL
+	t.Cleanup(func() { apiBaseOverride = "" })
+
+	v, err := LatestVersion(context.Background(), "chinayin/goxctl")
+	require.NoError(t, err)
+	assert.Equal(t, "v1.0.0", v)
+}
+
+func TestSelfUpdate(t *testing.T) {
+	want := []byte("#!/bin/sh\necho new\n")
+	srv := newReleaseServer(t, "goxctl", makeTarGz(t, "goxctl", want), true)
+	apiBaseOverride = srv.URL
+	t.Cleanup(func() { apiBaseOverride = "" })
+
+	dest := filepath.Join(t.TempDir(), "goxctl")
+	require.NoError(t, os.WriteFile(dest, []byte("old binary"), 0o755))
+
+	tag, err := SelfUpdate(context.Background(), "chinayin/goxctl", dest)
+	require.NoError(t, err)
+	assert.Equal(t, "v1.0.0", tag)
+
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, want, got) // 旧二进制被原子替换
+}
+
 func TestFindChecksum(t *testing.T) {
 	content := "abc123  goxctl_1.0.0_darwin_arm64.tar.gz\ndef456  checksums.txt\n"
 	assert.Equal(t, "abc123", findChecksum(content, "goxctl_1.0.0_darwin_arm64.tar.gz"))
