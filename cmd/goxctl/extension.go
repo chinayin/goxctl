@@ -114,13 +114,27 @@ installed manually and should be reinstalled the same way.`,
 		for _, n := range names {
 			mod, ok := installHint(n)
 			if !ok {
-				fmt.Fprintf(out, "  skip %s (not in registry; reinstall manually)\n", n)
+				fmt.Fprintf(out, "  %s: skipped (not in registry; reinstall manually)\n", n)
+				continue
+			}
+			current := m.ExtVersion(n)
+			target, err := ext.LatestVersion(cmd.Context(), mod)
+			if err != nil {
+				return fmt.Errorf("ext: check %s: %w", n, err)
+			}
+			if current != "" && current == target {
+				fmt.Fprintf(out, "  %s: already up to date (%s)\n", n, current)
 				continue
 			}
 			if err := m.Install(cmd.Context(), mod, ""); err != nil {
 				return fmt.Errorf("ext: upgrade %s: %w", n, err)
 			}
-			fmt.Fprintf(out, "  upgraded %s\n", n)
+			switch current {
+			case "":
+				fmt.Fprintf(out, "  %s: upgraded to %s\n", n, target)
+			default:
+				fmt.Fprintf(out, "  %s: upgraded %s -> %s\n", n, current, target)
+			}
 		}
 		return nil
 	},

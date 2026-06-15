@@ -81,3 +81,25 @@ func TestEnsureHost(t *testing.T) {
 	assert.Equal(t, "github.com/chinayin/goxctl-claude", ensureHost("github.com/chinayin/goxctl-claude"))
 	assert.Equal(t, "gitlab.com/x/y", ensureHost("gitlab.com/x/y"))
 }
+
+func TestManager_ExtVersion(t *testing.T) {
+	m := &Manager{dir: t.TempDir()}
+	writeFakeExt(t, m.dir, "demo", "#!/bin/sh\n")
+
+	// 未记录 → 空
+	assert.Empty(t, m.ExtVersion("demo"))
+
+	// record 后可读 version 与 module
+	require.NoError(t, m.record("demo", "github.com/x/goxctl-demo", "v1.2.3"))
+	assert.Equal(t, "v1.2.3", m.ExtVersion("demo"))
+	assert.Equal(t, "github.com/x/goxctl-demo", m.ExtModule("demo"))
+
+	// List 只列二进制（清单文件在 extensions 目录之外）
+	names, err := m.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"demo"}, names)
+
+	// Remove 顺带从清单移除
+	require.NoError(t, m.Remove("demo"))
+	assert.Empty(t, m.ExtVersion("demo"))
+}

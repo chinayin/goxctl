@@ -76,7 +76,7 @@ func TestInstallFromRelease_Success(t *testing.T) {
 	srv := newReleaseServer(t, repo, makeTarGz(t, repo, want), true)
 
 	m := &Manager{dir: t.TempDir(), apiBase: srv.URL}
-	err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: repo}, "")
+	_, err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: repo}, "")
 	require.NoError(t, err)
 
 	dest := filepath.Join(m.dir, repo)
@@ -97,7 +97,7 @@ func TestInstallFromRelease_NoMatchingAsset(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	m := &Manager{dir: t.TempDir(), apiBase: srv.URL}
-	err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: "goxctl-claude"}, "")
+	_, err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: "goxctl-claude"}, "")
 	assert.ErrorIs(t, err, errNoBinaryRelease)
 }
 
@@ -108,7 +108,7 @@ func TestInstallFromRelease_404(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	m := &Manager{dir: t.TempDir(), apiBase: srv.URL}
-	err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: "goxctl-claude"}, "v9.9.9")
+	_, err := m.installFromRelease(context.Background(), repoRef{owner: "chinayin", repo: "goxctl-claude"}, "v9.9.9")
 	assert.ErrorIs(t, err, errNoBinaryRelease)
 }
 

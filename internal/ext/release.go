@@ -64,36 +64,39 @@ type ghRelease struct {
 
 // installFromRelease 下载与当前平台匹配的预编译二进制并安装到 m.dir。
 // 无匹配资产或无该 release 时返回 errNoBinaryRelease（让上层回退 go install）。
-func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version string) error {
+func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version string) (string, error) {
 	client := &http.Client{Timeout: releaseTimeout}
 	rel, err := fetchRelease(ctx, client, m.apiBase, ref, version)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	bin, sum := pickAssets(rel.Assets, ref.repo)
 	if bin.URL == "" {
 		debug.Logf("no prebuilt asset matching %s_%s_%s", ref.repo, runtime.GOOS, runtime.GOARCH)
-		return errNoBinaryRelease
+		return "", errNoBinaryRelease
 	}
 	debug.Logf("matched asset: %s", bin.Name)
 
 	data, err := httpGet(ctx, client, bin.URL)
 	if err != nil {
-		return fmt.Errorf("ext: download %q: %w", bin.Name, err)
+		return "", fmt.Errorf("ext: download %q: %w", bin.Name, err)
 	}
 	if sum.URL != "" {
 		if err := verifyChecksum(ctx, client, sum.URL, bin.Name, data); err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
-		return fmt.Errorf("ext: mkdir %q: %w", m.dir, err)
+		return "", fmt.Errorf("ext: mkdir %q: %w", m.dir, err)
 	}
 	dest := filepath.Join(m.dir, ref.repo) // 二进制名即 repo（goxctl-<name>），与 Find 一致
 	debug.Logf("installing prebuilt binary -> %s", dest)
-	return extractBinary(data, ref.repo, dest)
+	if err := extractBinary(data, ref.repo, dest); err != nil {
+		return "", err
+	}
+	return rel.TagName, nil // 实际 tag，供 Install 写入清单
 }
 
 // fetchRelease 取指定 tag 或 latest 的 release 元数据；404 视为无 release。

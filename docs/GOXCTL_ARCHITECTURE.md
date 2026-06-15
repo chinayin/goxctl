@@ -39,7 +39,7 @@
 - **用法错误体验**：参数/flag 用法错误显示该命令 usage，业务错误不显示（各 RunE 开头设 `SilenceUsage`）；被转发的扩展非 0 退出时，核心按其退出码静默退出，不重复打印 error。
 - **自更新**（区别于扩展的数据同步命令）：
   - `goxctl upgrade`：查最新 release → 下载当前平台二进制 → sha256 校验 → **原子替换运行中的二进制**（写临时 + rename，deno/bun 风格）。`--check` 只查不装；目标目录（如 `/usr/local/bin`）不可写时提示用 sudo。复用 `internal/ext` 的下载/校验逻辑（`SelfUpdate` / `LatestVersion`）。
-  - `goxctl extension upgrade <name>|--all`：把已装扩展重装到最新 release（查注册表得 module，gh 风格）。
+  - `goxctl extension upgrade <name>|--all`：把已装扩展重装到最新 release（gh 风格）。显示「当前版本 → 最新版本」或 already up to date（已最新则跳过不重装）。扩展元数据（module + version）统一记在 `~/.gox/extensions.yaml`（单一清单，类似 package.json，安装/升级写入、remove 删除）；upgrade 从清单读 module 与当前版本，因此**不再依赖写死的注册表**，任意已装扩展都能升级。注册表（registry.go）只用于「未装扩展时的安装提示」。
   - 三层"更新"别混：`goxctl upgrade`=核心二进制、`extension upgrade`=扩展二进制、`goxctl <name> update`（如 `goxctl claude update`）=扩展同步的项目数据。
 
 ### 4.1 未装扩展的提示（已知扩展注册表）

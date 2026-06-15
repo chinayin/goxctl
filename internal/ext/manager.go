@@ -76,21 +76,29 @@ func (m *Manager) Dispatch(ctx context.Context, name string, args []string) erro
 // modulePath 为扩展仓库的 module 路径（如 github.com/<owner>/goxctl-<name>）；version 缺省 latest。
 func (m *Manager) Install(ctx context.Context, modulePath, version string) error {
 	modulePath = ensureHost(modulePath)
+	name := extName(modulePath)
 	debug.Logf("install module=%q version=%q", modulePath, version)
 
 	// 优先安装预编译二进制（无需 Go 环境）
 	if ref, ok := parseModule(modulePath); ok {
 		debug.Logf("resolved owner=%s repo=%s", ref.owner, ref.repo)
-		err := m.installFromRelease(ctx, ref, version)
+		tag, err := m.installFromRelease(ctx, ref, version)
 		if err == nil {
-			return nil
+			return m.record(name, modulePath, tag) // 写入清单
 		}
 		if !errors.Is(err, errNoBinaryRelease) {
 			return err // release 流程真实错误（网络/校验），不静默回退
 		}
 		// 无匹配预编译二进制 → 回退 go install
 	}
-	return m.installViaGo(ctx, modulePath, version)
+	if err := m.installViaGo(ctx, modulePath, version); err != nil {
+		return err
+	}
+	v := version
+	if v == "" {
+		v = "latest"
+	}
+	return m.record(name, modulePath, v)
 }
 
 // installViaGo 用 go install 从源码安装（开发者回退路径，需本机有 go 工具链）。
@@ -134,9 +142,11 @@ func (m *Manager) List() ([]string, error) {
 		if e.IsDir() {
 			continue
 		}
-		if n, ok := strings.CutPrefix(e.Name(), binPrefix); ok {
-			names = append(names, n)
+		n, ok := strings.CutPrefix(e.Name(), binPrefix)
+		if !ok || !isExecutable(filepath.Join(m.dir, e.Name())) {
+			continue // 跳过 .ver 等非可执行的元数据文件
 		}
+		names = append(names, n)
 	}
 	slices.Sort(names)
 	return names, nil
@@ -151,7 +161,13 @@ func (m *Manager) Remove(name string) error {
 		}
 		return fmt.Errorf("ext: remove %q: %w", name, err)
 	}
+	_ = m.forget(name) // 顺带从清单移除
 	return nil
+}
+
+// extName 从 module 路径取扩展名（去掉 host/owner 与 goxctl- 前缀）。
+func extName(modulePath string) string {
+	return strings.TrimPrefix(path.Base(modulePath), binPrefix)
 }
 
 func isExecutable(p string) bool {
