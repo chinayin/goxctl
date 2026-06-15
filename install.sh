@@ -6,7 +6,7 @@ set -u
 
 GITHUB_REPO="chinayin/goxctl"
 BINARY_NAME="goxctl"
-INSTALL_DIR="${GOXCTL_BIN_DIR:-$HOME/.gox/bin}"
+INSTALL_DIR="${GOXCTL_BIN_DIR:-/usr/local/bin}"
 
 # --- terminal detection ---
 
@@ -59,6 +59,24 @@ download() { # url output
 	fi
 }
 
+# install_binary src dst —— 安装到默认在 PATH 的目录；目标不可写时回退 sudo。
+install_binary() {
+	local _src="$1" _dst="$2" _dir
+	_dir=$(dirname "$_dst")
+	if mkdir -p "$_dir" 2> /dev/null && [ -w "$_dir" ]; then
+		mv -f "$_src" "$_dst"
+		chmod 755 "$_dst"
+	elif command -v sudo > /dev/null 2>&1; then
+		info "installing to $_dir (requires sudo)"
+		sudo mkdir -p "$_dir"
+		sudo mv -f "$_src" "$_dst"
+		sudo chmod 755 "$_dst"
+	else
+		err "cannot write to $_dir and sudo not found; set GOXCTL_BIN_DIR to a writable dir"
+		exit 1
+	fi
+}
+
 # --- platform detection ---
 
 get_target() {
@@ -108,7 +126,7 @@ usage() {
 		"Options:" \
 		"  --version=VER   Version to install (default: latest)" \
 		"  --proxy=URL     HTTPS proxy for downloads" \
-		"  --dir=PATH      Install directory (default: ~/.goxctl/bin)" \
+		"  --dir=PATH      Install directory (default: /usr/local/bin)" \
 		"  --help          Show this help"
 }
 
@@ -165,9 +183,8 @@ main() {
 		exit 1
 	fi
 
-	mkdir -p "$INSTALL_DIR"
-	tar -xzf "${_tmpdir}/${_asset}" -C "$INSTALL_DIR" "$BINARY_NAME"
-	chmod 755 "${INSTALL_DIR}/${BINARY_NAME}"
+	tar -xzf "${_tmpdir}/${_asset}" -C "${_tmpdir}" "$BINARY_NAME"
+	install_binary "${_tmpdir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 	info "installed: ${INSTALL_DIR}/${BINARY_NAME}"
 
 	case ":${PATH}:" in

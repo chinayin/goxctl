@@ -7,7 +7,7 @@ gox 生态的可扩展命令行工具：本身只做**命令分发**与 **extens
 预编译二进制，**无需 Go 环境**（macOS / Linux，amd64 / arm64）：
 
 ```bash
-# 从 Releases 下载对应平台二进制，解压到 ~/.gox/bin（提示加入 PATH）
+# 下载对应平台二进制，安装到 /usr/local/bin（默认在 PATH；不可写则回退 sudo）
 curl -sSfL https://raw.githubusercontent.com/chinayin/goxctl/main/install.sh | sh
 ```
 
