@@ -35,6 +35,8 @@
 - **转发**：未知子命令 → 查 `~/.gox/extensions/goxctl-<name>`（或 PATH）→ `exec` 并继承 stdio。
 - **安装**（`extension install <module>`）：**优先下载与当前平台匹配的预编译二进制**（GitHub Release 资产，无需 Go 环境），无匹配时回退 `go install`（需本机有 go 工具链）。装到 `~/.gox/extensions`，二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。机制详见 §5。
 - `extension list`：列已装扩展；`extension remove <name>`：删除。
+- **调试输出**：`GOXCTL_DEBUG=1` 或 `goxctl --verbose <cmd>` 打印解析的 owner/repo、release URL、命中的资产、走二进制还是 go install、转发 exec 等。环境变量贯穿转发链（扩展子进程自动继承）；`--verbose` 会写回该变量，故转发出去的扩展同样开启。
+- **用法错误体验**：参数/flag 用法错误显示该命令 usage，业务错误不显示（各 RunE 开头设 `SilenceUsage`）；被转发的扩展非 0 退出时，核心按其退出码静默退出，不重复打印 error。
 
 ### 4.1 未装扩展的提示（已知扩展注册表）
 
@@ -42,7 +44,7 @@
 
 - `cmd/goxctl/registry.go` 维护 `knownExtensions` map：子命令名 → module 路径（具体已知扩展见该文件，本文不复制其内容）。
 - 转发命中 `ErrNotFound`（扩展未安装）时：
-  - **在注册表** → 提示 `扩展 "<name>" 未安装，运行：goxctl extension install <module>`；
+  - **在注册表** → 提示 `extension "<name>" is not installed; run: goxctl extension install <module>`；
   - **不在注册表** → 回落 cobra，报 `unknown command`。
 - 新增官方扩展时在 `knownExtensions` 登记一行。将来扩展增多，可平滑升级为远程 extension index（az 模式）。
 - 取舍：相比 git/docker/gh 的"未知即报错"，这给了 az 式的安装指引，降低摩擦；写死 map 避免引入远程索引的复杂度。
