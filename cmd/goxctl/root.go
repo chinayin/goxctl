@@ -101,7 +101,7 @@ func tryForward(ctx context.Context, args []string) (bool, error) {
 func isBuiltin(name string) bool {
 	switch name {
 	case "extension", "ext", "version", "upgrade", "help", "completion",
-		"-h", "--help", "--version":
+		"-h", "--help", "-V", "--version":
 		return true
 	default:
 		return false
@@ -109,12 +109,44 @@ func isBuiltin(name string) bool {
 }
 
 func init() {
-	rootCmd.Version = version // 支持 goxctl --version（-v 留给 verbose）
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose debug output (or set GOXCTL_DEBUG=1)")
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		if v, _ := cmd.Flags().GetBool("verbose"); v {
 			debug.Enable()
 		}
 	}
+
+	// version 走 -V（大写）短旗：-v 已给 verbose，凑齐 -v/-V/-h 三件套。
+	// 预注册同名 bool flag，cobra 检测到已存在便不再套用默认（-v 或无短旗）。
+	rootCmd.Version = version
+	rootCmd.Flags().BoolP("version", "V", false, "print version and exit")
+
+	// 去噪：移除自动生成的 completion 子命令、隐藏 help 子命令。
+	// cobra 默认模板用 (eq .Name "help") 硬编码强制列出 help，.Hidden 对它无效；
+	// 故自定义一个真名非 "help" 的隐藏命令、用别名 "help" 接管——既不在列表露出，
+	// goxctl help / goxctl help <cmd> / -h / --help 仍照常工作。
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.SetHelpCommand(newHiddenHelpCmd())
 	rootCmd.AddCommand(extensionCmd, versionCmd)
+}
+
+// newHiddenHelpCmd 复刻 cobra 默认 help 命令的行为，但真名非 "help" 且 Hidden，
+// 从而不出现在命令列表里（见 init 注释）。
+func newHiddenHelpCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "help-topic [command]",
+		Aliases: []string{"help"},
+		Short:   "Help about any command",
+		Hidden:  true,
+		Run: func(c *cobra.Command, args []string) {
+			target, _, err := c.Root().Find(args)
+			if target == nil || err != nil {
+				_ = c.Root().Usage()
+				return
+			}
+			target.InitDefaultHelpFlag()
+			target.InitDefaultVersionFlag()
+			_ = target.Help()
+		},
+	}
 }
