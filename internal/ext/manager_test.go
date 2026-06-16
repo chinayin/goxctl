@@ -10,6 +10,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestManager_Install_FromBinary_RecordsVersion 验证 Install 走预编译路径时把 release tag
+// 记录到清单，而非原始（空）输入版本。
+func TestManager_Install_FromBinary_RecordsVersion(t *testing.T) {
+	const repo = "goxctl-demo"
+	targz := makeTarGz(t, repo, []byte("#!/bin/sh\n"))
+	srv := newReleaseServer(t, repo, targz, true)
+
+	m := &Manager{dir: t.TempDir(), apiBase: srv.URL}
+
+	err := m.Install(context.Background(), "chinayin/goxctl-demo", "")
+	require.NoError(t, err)
+
+	// 二进制应存在且可执行
+	bin := filepath.Join(m.dir, repo)
+	info, statErr := os.Stat(bin)
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Mode()&0o111, "安装的二进制应可执行")
+
+	// Install 应记录 release tag（v1.0.0），而非原始空版本
+	assert.Equal(t, "v1.0.0", m.ExtVersion("demo"))
+	assert.Equal(t, "github.com/chinayin/goxctl-demo", m.ExtModule("demo"))
+}
+
 // writeFakeExt 在 dir 下写一个名为 goxctl-<name> 的可执行脚本。
 func writeFakeExt(t *testing.T, dir, name, script string) {
 	t.Helper()
