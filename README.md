@@ -23,12 +23,13 @@ goxctl extension upgrade <name>|--all     # 更新扩展到最新 release
 goxctl extension remove <name>            # 删除扩展
 goxctl <name> ...                         # 转发给 goxctl-<name> 扩展
 goxctl -v / --verbose <name> ...          # 调试输出（等价 GOXCTL_DEBUG=1）
+goxctl -V / --version                     # 版本；-h / --help 查看帮助
 ```
 
 - `extension install` **优先下载与当前平台匹配的预编译二进制**（无需 Go），无匹配时回退 `go install`（需本机有 go）。module 可简写 `owner/repo`（无 host 默认补 `github.com`）。
 - 未知子命令 `goxctl <name> ...` 会被转发给名为 `goxctl-<name>` 的可执行文件（先查 `~/.gox/extensions`，再查 PATH）。
 - 扩展是独立仓库、独立版本的 Go 程序；各扩展的功能与用法见其各自仓库。
 - 对用户心智统一为 `goxctl <name>`，无需直接调用 `goxctl-<name>`。
-- 调试：`GOXCTL_DEBUG=1` 或 `goxctl --verbose`/`-v`，环境变量贯穿转发链（扩展也支持，前置/后置 `--verbose` 都生效）。`-v` 专给 verbose；版本用 `goxctl version` 或 `--version`。
+- 调试：`GOXCTL_DEBUG=1` 或 `goxctl --verbose`/`-v`，环境变量贯穿转发链（扩展也支持，前置/后置 `--verbose` 都生效）。短旗三件套：`-v` verbose、`-V` version、`-h` help。
 
 详见 [架构设计](docs/GOXCTL_ARCHITECTURE.md)。
