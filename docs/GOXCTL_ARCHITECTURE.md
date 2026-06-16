@@ -35,7 +35,8 @@
 - **转发**：未知子命令 → 查 `~/.gox/extensions/goxctl-<name>`（或 PATH）→ `exec` 并继承 stdio。
 - **安装**（`extension install <module>`）：**优先下载与当前平台匹配的预编译二进制**（GitHub Release 资产，无需 Go 环境），无匹配时回退 `go install`（需本机有 go 工具链）。装到 `~/.gox/extensions`，二进制名即 `goxctl-<name>`，转发可直接发现。`module` 可简写 `owner/repo`（无 host 补 github.com，由 `ensureHost` 处理）。机制详见 §5。
 - `extension list`：列已装扩展；`extension remove <name>`：删除。
-- **调试输出**：`GOXCTL_DEBUG=1` 或 `goxctl --verbose <cmd>` 打印解析的 owner/repo、release URL、命中的资产、走二进制还是 go install、转发 exec 等。环境变量贯穿转发链（扩展子进程自动继承）；`--verbose` 会写回该变量，故转发出去的扩展同样开启。
+- **调试输出**：`GOXCTL_DEBUG=1`、`goxctl --verbose <cmd>` 或 `-v` 打印解析的 owner/repo、release URL、命中资产、转发 exec 等。环境变量贯穿转发链（扩展子进程继承）；核心 `--verbose`/`-v` 写回该变量，且**扩展自身也全局支持 `--verbose`/`-v`**，故 `goxctl --verbose claude update`（前置）与 `goxctl claude update --verbose`（后置）都生效。注：`-v` 专用于 verbose，版本用 `goxctl version` 或 `goxctl --version`。
+- **输出风格**：列表用对齐表格（大写表头），操作成功用 `✓`（TTY 上色，管道自动无色），错误用 `error:`；统一无静默成功（参照 gh/docker/brew）。
 - **用法错误体验**：参数/flag 用法错误显示该命令 usage，业务错误不显示（各 RunE 开头设 `SilenceUsage`）；被转发的扩展非 0 退出时，核心按其退出码静默退出，不重复打印 error。
 - **自更新**（区别于扩展的数据同步命令）：
   - `goxctl upgrade`：查最新 release → 下载当前平台二进制 → sha256 校验 → **原子替换运行中的二进制**（写临时 + rename，deno/bun 风格）。`--check` 只查不装；目标目录（如 `/usr/local/bin`）不可写时提示用 sudo。复用 `internal/ext` 的下载/校验逻辑（`SelfUpdate` / `LatestVersion`）。

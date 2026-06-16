@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/chinayin/goxctl/internal/ext"
+	"github.com/chinayin/goxctl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,7 @@ Updating extensions is separate: goxctl extension upgrade <name>|--all.`,
 			return err
 		}
 		if sameVersion(latest, version) {
-			fmt.Fprintf(out, "already up to date (%s)\n", version)
+			fmt.Fprintf(out, "goxctl already up to date (%s)\n", version)
 			return nil
 		}
 		if upgradeCheck {
@@ -48,12 +49,11 @@ Updating extensions is separate: goxctl extension upgrade <name>|--all.`,
 			self = resolved
 		}
 
-		fmt.Fprintf(out, "upgrading goxctl %s -> %s ...\n", version, latest)
 		tag, err := ext.SelfUpdate(cmd.Context(), selfModule, self)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "upgraded to %s\n", tag)
+		ui.Successf(out, "upgraded goxctl %s → %s", version, tag)
 		return nil
 	},
 }

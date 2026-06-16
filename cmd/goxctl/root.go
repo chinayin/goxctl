@@ -48,8 +48,8 @@ func run() error {
 	defer stop()
 
 	args := os.Args[1:]
-	// 剥离前置全局开关：goxctl --verbose <cmd>（转发不经 cobra，需在此处理）
-	for len(args) > 0 && args[0] == "--verbose" {
+	// 剥离前置全局开关：goxctl --verbose/-v <cmd>（转发不经 cobra，需在此处理）
+	for len(args) > 0 && (args[0] == "--verbose" || args[0] == "-v") {
 		debug.Enable()
 		args = args[1:]
 	}
@@ -90,7 +90,7 @@ func tryForward(ctx context.Context, args []string) (bool, error) {
 func isBuiltin(name string) bool {
 	switch name {
 	case "extension", "ext", "version", "upgrade", "help", "completion",
-		"-h", "--help", "-v", "--version":
+		"-h", "--help", "--version":
 		return true
 	default:
 		return false
@@ -98,7 +98,8 @@ func isBuiltin(name string) bool {
 }
 
 func init() {
-	rootCmd.PersistentFlags().Bool("verbose", false, "enable verbose debug output (or set GOXCTL_DEBUG=1)")
+	rootCmd.Version = version // 支持 goxctl --version（-v 留给 verbose）
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose debug output (or set GOXCTL_DEBUG=1)")
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		if v, _ := cmd.Flags().GetBool("verbose"); v {
 			debug.Enable()

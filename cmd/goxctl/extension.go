@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"path"
+	"strings"
 
 	"github.com/chinayin/goxctl/internal/ext"
+	"github.com/chinayin/goxctl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +27,7 @@ and falls back to "go install" when no binary matches the current platform.
 <module> may be shortened to owner/repo (host defaults to github.com).`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cmd.SilenceUsage = true // 进入业务逻辑后，错误不再是用法问题
+		cmd.SilenceUsage = true
 		m, err := ext.NewManager()
 		if err != nil {
 			return err
@@ -33,7 +36,12 @@ and falls back to "go install" when no binary matches the current platform.
 		if len(args) == 2 {
 			version = args[1]
 		}
-		return m.Install(cmd.Context(), args[0], version)
+		if err := m.Install(cmd.Context(), args[0], version); err != nil {
+			return err
+		}
+		name := extName(args[0])
+		ui.Successf(cmd.OutOrStdout(), "installed %s %s", name, m.ExtVersion(name))
+		return nil
 	},
 }
 
@@ -54,13 +62,15 @@ var extListCmd = &cobra.Command{
 
 		out := cmd.OutOrStdout()
 		if len(names) == 0 {
-			fmt.Fprintln(out, "(no extensions installed)")
+			fmt.Fprintln(out, "no extensions installed")
 			return nil
 		}
+		t := ui.Table(out)
+		fmt.Fprintln(t, "NAME\tVERSION\tMODULE")
 		for _, n := range names {
-			fmt.Fprintf(out, "  %s\n", n)
+			fmt.Fprintf(t, "%s\t%s\t%s\n", n, dash(m.ExtVersion(n)), dash(m.ExtModule(n)))
 		}
-		return nil
+		return t.Flush()
 	},
 }
 
@@ -74,7 +84,11 @@ var extRemoveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return m.Remove(args[0])
+		if err := m.Remove(args[0]); err != nil {
+			return err
+		}
+		ui.Successf(cmd.OutOrStdout(), "removed %s", args[0])
+		return nil
 	},
 }
 
@@ -86,10 +100,7 @@ var extUpgradeCmd = &cobra.Command{
 	Long: `Reinstall extensions at their latest release.
 
   goxctl extension upgrade <name>   upgrade one extension
-  goxctl extension upgrade --all    upgrade all installed extensions
-
-Only extensions in the known registry can be upgraded automatically; others were
-installed manually and should be reinstalled the same way.`,
+  goxctl extension upgrade --all    upgrade all installed extensions`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
@@ -112,10 +123,14 @@ installed manually and should be reinstalled the same way.`,
 		}
 
 		for _, n := range names {
-			mod, ok := installHint(n)
-			if !ok {
-				fmt.Fprintf(out, "  %s: skipped (not in registry; reinstall manually)\n", n)
-				continue
+			// module 优先取自清单（任意已装扩展），回退注册表
+			mod := m.ExtModule(n)
+			if mod == "" {
+				var ok bool
+				if mod, ok = installHint(n); !ok {
+					fmt.Fprintf(out, "%s: skipped (unknown module; reinstall manually)\n", n)
+					continue
+				}
 			}
 			current := m.ExtVersion(n)
 			target, err := ext.LatestVersion(cmd.Context(), mod)
@@ -123,21 +138,33 @@ installed manually and should be reinstalled the same way.`,
 				return fmt.Errorf("ext: check %s: %w", n, err)
 			}
 			if current != "" && current == target {
-				fmt.Fprintf(out, "  %s: already up to date (%s)\n", n, current)
+				fmt.Fprintf(out, "%s already up to date (%s)\n", n, current)
 				continue
 			}
 			if err := m.Install(cmd.Context(), mod, ""); err != nil {
 				return fmt.Errorf("ext: upgrade %s: %w", n, err)
 			}
-			switch current {
-			case "":
-				fmt.Fprintf(out, "  %s: upgraded to %s\n", n, target)
-			default:
-				fmt.Fprintf(out, "  %s: upgraded %s -> %s\n", n, current, target)
+			if current == "" {
+				ui.Successf(out, "%s → %s", n, target)
+			} else {
+				ui.Successf(out, "%s %s → %s", n, current, target)
 			}
 		}
 		return nil
 	},
+}
+
+// extName 从 module 取扩展名（goxctl-claude → claude）。
+func extName(module string) string {
+	return strings.TrimPrefix(path.Base(module), "goxctl-")
+}
+
+// dash 把空串显示为 -（表格占位）。
+func dash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func init() {
