@@ -1,6 +1,7 @@
 package ext
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -46,12 +47,16 @@ func (m *Manager) loadManifest() (*extManifest, error) {
 	return man, nil
 }
 
-// saveManifest 写回清单。
+// saveManifest 写回清单（2 空格缩进，对齐主流 YAML 风格）。
 func (m *Manager) saveManifest(man *extManifest) error {
-	b, err := yaml.Marshal(man)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(man); err != nil {
 		return fmt.Errorf("ext: marshal manifest: %w", err)
 	}
+	_ = enc.Close()
+	b := buf.Bytes()
 	if err := os.MkdirAll(filepath.Dir(m.manifestPath()), 0o755); err != nil {
 		return fmt.Errorf("ext: mkdir for manifest: %w", err)
 	}
