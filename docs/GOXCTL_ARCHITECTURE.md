@@ -18,7 +18,7 @@
 | `goxctl` | 核心 CLI 二进制 | 命令分发 + extension 管理（install/list/remove） |
 | `goxctl-<name>` | extension | 独立仓库、独立版本，被 `goxctl` 转发；**功能与技术细节见各自仓库** |
 
-核心与各 extension 均用 `gox/cli`(cobra 封装) 构建（dogfood）。
+核心与各 extension 直接基于 `spf13/cobra` 构建；不使用 `gox/cli` 的启动 banner（它面向常驻微服务，而 goxctl 是转发型命令行工具，help 输出刻意保持 gh/git 朴素风）。
 
 ## 3. 核心设计决策
 
