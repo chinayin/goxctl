@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,9 +82,9 @@ func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version s
 	ui.Stepf(os.Stdout, "Installing %s %s (%s-%s)...",
 		strings.TrimPrefix(ref.repo, binPrefix), rel.TagName, runtime.GOOS, runtime.GOARCH)
 
-	data, err := httpGet(ctx, client, bin.URL)
+	data, err := httpGetf(ctx, client, bin.URL, "download "+bin.Name)
 	if err != nil {
-		return "", fmt.Errorf("ext: download %q: %w", bin.Name, err)
+		return "", err
 	}
 	if sum.URL != "" {
 		if err := verifyChecksum(ctx, client, sum.URL, bin.Name, data); err != nil {
@@ -125,6 +126,9 @@ func fetchRelease(ctx context.Context, client *http.Client, apiBase string, ref 
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if h := netHint("query release", err); h != nil {
+			return nil, h
+		}
 		return nil, fmt.Errorf("ext: query release: %w", err)
 	}
 	defer resp.Body.Close()
@@ -160,9 +164,9 @@ func pickAssets(assets []ghAsset, repo string) (bin, sum ghAsset) {
 
 // verifyChecksum 下载 checksums.txt 并校验 data 的 sha256 与其中 assetName 一行一致。
 func verifyChecksum(ctx context.Context, client *http.Client, sumURL, assetName string, data []byte) error {
-	sums, err := httpGet(ctx, client, sumURL)
+	sums, err := httpGetf(ctx, client, sumURL, "download checksums")
 	if err != nil {
-		return fmt.Errorf("ext: download checksums: %w", err)
+		return err
 	}
 	want := findChecksum(string(sums), assetName)
 	if want == "" {
@@ -217,6 +221,37 @@ func extractBinary(targz []byte, want, dest string) error {
 		return f.Close()
 	}
 	return fmt.Errorf("ext: binary %q not found in archive", want)
+}
+
+// netHint 把网络/超时类错误翻译成带操作建议的友好错误；非网络错误返回 nil（交调用方原样处理）。
+func netHint(action string, err error) error {
+	var ne net.Error
+	timeout := errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) || (errors.As(err, &ne) && ne.Timeout())
+	if !timeout && !errors.As(err, &ne) {
+		return nil
+	}
+	reason := "failed (network unreachable)"
+	if timeout {
+		reason = fmt.Sprintf("timed out after %s", releaseTimeout)
+	}
+	return fmt.Errorf(`ext: %s %s.
+  network is slow or GitHub is unreachable. options:
+  - retry the command
+  - use a proxy: add --proxy http://host:port (or set GOXCTL_PROXY)
+  - sudo clears your shell proxy vars, so under sudo pass --proxy explicitly,
+    or run: sudo GOXCTL_PROXY=$https_proxy goxctl upgrade`, action, reason)
+}
+
+// httpGetf 下载 url 并在网络错误时给出友好提示；action 用于错误描述（如 "download foo.tar.gz"）。
+func httpGetf(ctx context.Context, client *http.Client, url, action string) ([]byte, error) {
+	data, err := httpGet(ctx, client, url)
+	if err != nil {
+		if h := netHint(action, err); h != nil {
+			return nil, h
+		}
+		return nil, fmt.Errorf("ext: %s: %w", action, err)
+	}
+	return data, nil
 }
 
 // httpGet 读取 url 全部内容（受 maxAssetSize 限制）。
@@ -280,9 +315,9 @@ func SelfUpdate(ctx context.Context, modulePath, destPath string) (string, error
 	ui.Stepf(os.Stdout, "Downloading %s %s (%s-%s)...",
 		strings.TrimPrefix(ref.repo, binPrefix), rel.TagName, runtime.GOOS, runtime.GOARCH)
 
-	data, err := httpGet(ctx, client, bin.URL)
+	data, err := httpGetf(ctx, client, bin.URL, "download "+bin.Name)
 	if err != nil {
-		return "", fmt.Errorf("ext: download %q: %w", bin.Name, err)
+		return "", err
 	}
 	if sum.URL != "" {
 		if err := verifyChecksum(ctx, client, sum.URL, bin.Name, data); err != nil {

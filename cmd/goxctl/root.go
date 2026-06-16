@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 
 	"github.com/chinayin/goxctl/internal/debug"
 	"github.com/chinayin/goxctl/internal/ext"
+	"github.com/chinayin/goxctl/internal/proxy"
 	"github.com/spf13/cobra"
 )
 
@@ -58,12 +60,10 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	args := os.Args[1:]
-	// 剥离前置全局开关：goxctl --verbose/-v <cmd>（转发不经 cobra，需在此处理）
-	for len(args) > 0 && (args[0] == "--verbose" || args[0] == "-v") {
-		debug.Enable()
-		args = args[1:]
-	}
+	// 剥离前置全局开关：goxctl --verbose/-v --proxy <url> <cmd>
+	// （转发不经 cobra，需在此手动处理；剥离后还原成扩展真正的参数）
+	args, proxyFlag := stripGlobalFlags(os.Args[1:])
+	proxy.Apply(proxyFlag)
 
 	if len(args) > 0 && !isBuiltin(args[0]) {
 		if handled, err := tryForward(ctx, args); handled {
@@ -71,6 +71,26 @@ func run() error {
 		}
 	}
 	return rootCmd.ExecuteContext(ctx)
+}
+
+// stripGlobalFlags 剥离转发前的前置全局开关，返回扩展真正的参数与 --proxy 值。
+// -v/--verbose 直接生效（debug.Enable）；--proxy/--proxy=<url> 取值后交由 proxy.Apply 落地。
+func stripGlobalFlags(args []string) (rest []string, proxyURL string) {
+	for len(args) > 0 {
+		switch {
+		case args[0] == "--verbose" || args[0] == "-v":
+			debug.Enable()
+			args = args[1:]
+		case args[0] == "--proxy" && len(args) >= 2:
+			proxyURL, args = args[1], args[2:]
+		case strings.HasPrefix(args[0], "--proxy="):
+			proxyURL = strings.TrimPrefix(args[0], "--proxy=")
+			args = args[1:]
+		default:
+			return args, proxyURL
+		}
+	}
+	return args, proxyURL
 }
 
 // tryForward 尝试把 args 转发给扩展。handled=false 表示扩展未安装且非已知扩展，
@@ -110,10 +130,13 @@ func isBuiltin(name string) bool {
 
 func init() {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose debug output (or set GOXCTL_DEBUG=1)")
+	rootCmd.PersistentFlags().String("proxy", "", "HTTP/HTTPS proxy URL for downloads (or set GOXCTL_PROXY)")
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		if v, _ := cmd.Flags().GetBool("verbose"); v {
 			debug.Enable()
 		}
+		p, _ := cmd.Flags().GetString("proxy")
+		proxy.Apply(p)
 	}
 
 	// version 走 -V（大写）短旗：-v 已给 verbose，凑齐 -v/-V/-h 三件套。
