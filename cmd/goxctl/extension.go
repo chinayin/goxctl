@@ -25,6 +25,11 @@ Prefers a prebuilt binary from the extension's GitHub Releases (no Go required),
 and falls back to "go install" when no binary matches the current platform.
 
 <module> may be shortened to owner/repo (host defaults to github.com).`,
+	Example: `  # Install from a shorthand owner/repo (host defaults to github.com)
+  goxctl extension install chinayin/goxctl-claude
+
+  # Pin a specific version
+  goxctl extension install chinayin/goxctl-claude v0.7.0`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
@@ -46,9 +51,10 @@ and falls back to "go install" when no binary matches the current platform.
 }
 
 var extListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List installed extensions",
-	Args:  cobra.NoArgs,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List installed extensions",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		m, err := ext.NewManager()
@@ -68,16 +74,18 @@ var extListCmd = &cobra.Command{
 		t := ui.Table(out)
 		fmt.Fprintln(t, "NAME\tVERSION\tMODULE")
 		for _, n := range names {
-			fmt.Fprintf(t, "%s\t%s\t%s\n", n, dash(m.ExtVersion(n)), dash(m.ExtModule(n)))
+			// MODULE 为末列次要信息，暗色显示（仅末列安全，不破坏 tabwriter 对齐）
+			fmt.Fprintf(t, "%s\t%s\t%s\n", n, dash(m.ExtVersion(n)), ui.Dim(dash(m.ExtModule(n))))
 		}
 		return t.Flush()
 	},
 }
 
 var extRemoveCmd = &cobra.Command{
-	Use:   "remove <name>",
-	Short: "Remove an installed extension",
-	Args:  cobra.ExactArgs(1),
+	Use:     "remove <name>",
+	Aliases: []string{"rm"},
+	Short:   "Remove an installed extension",
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 		m, err := ext.NewManager()

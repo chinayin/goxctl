@@ -21,6 +21,17 @@ built in, any other subcommand is forwarded to a standalone goxctl-<name>
 extension (gh/git style).
 
 For example, "goxctl <name> ..." is forwarded to the goxctl-<name> extension.`,
+	Example: `  # Install an extension (prebuilt binary, or go install fallback)
+  goxctl extension install chinayin/goxctl-claude
+
+  # List installed extensions
+  goxctl extension list
+
+  # Run an extension — forwarded to goxctl-<name>
+  goxctl claude add
+
+  # Update goxctl itself to the latest release
+  goxctl upgrade`,
 	// 不设 SilenceUsage：参数/flag 用法错误时显示 usage；业务错误在各 RunE 开头抑制。
 	SilenceErrors: true, // 错误由 Execute 统一打印，避免与转发的扩展重复
 }

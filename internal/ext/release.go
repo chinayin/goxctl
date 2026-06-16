@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/chinayin/goxctl/internal/debug"
+	"github.com/chinayin/goxctl/internal/ui"
 )
 
 const (
@@ -77,6 +78,8 @@ func (m *Manager) installFromRelease(ctx context.Context, ref repoRef, version s
 		return "", errNoBinaryRelease
 	}
 	debug.Logf("matched asset: %s", bin.Name)
+	ui.Stepf(os.Stdout, "Installing %s %s (%s-%s)...",
+		strings.TrimPrefix(ref.repo, binPrefix), rel.TagName, runtime.GOOS, runtime.GOARCH)
 
 	data, err := httpGet(ctx, client, bin.URL)
 	if err != nil {
@@ -274,6 +277,8 @@ func SelfUpdate(ctx context.Context, modulePath, destPath string) (string, error
 		return "", fmt.Errorf("ext: no prebuilt binary for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 	debug.Logf("self-update: matched asset %s (%s)", bin.Name, rel.TagName)
+	ui.Stepf(os.Stdout, "Downloading %s %s (%s-%s)...",
+		strings.TrimPrefix(ref.repo, binPrefix), rel.TagName, runtime.GOOS, runtime.GOARCH)
 
 	data, err := httpGet(ctx, client, bin.URL)
 	if err != nil {
