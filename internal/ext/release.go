@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/chinayin/goxctl/internal/debug"
+	"github.com/chinayin/goxctl/internal/proxy"
 	"github.com/chinayin/goxctl/internal/ui"
 )
 
@@ -234,12 +235,18 @@ func netHint(action string, err error) error {
 	if timeout {
 		reason = fmt.Sprintf("timed out after %s", releaseTimeout)
 	}
+	// 已在用代理时，别再反过来建议“添加 --proxy”——那只会让用户以为代理没生效；
+	// 转而提示代理本身可能慢/不可达。未用代理时才建议添加。
+	proxyLine := "  - use a proxy: add --proxy http://host:port (or set GOXCTL_PROXY)"
+	if p := proxy.InUse(); p != "" {
+		proxyLine = fmt.Sprintf("  - proxy %s is in use — it may be slow or unreachable; verify it works or retry", p)
+	}
 	return fmt.Errorf(`ext: %s %s.
   network is slow or GitHub is unreachable. options:
   - retry the command
-  - use a proxy: add --proxy http://host:port (or set GOXCTL_PROXY)
+%s
   - sudo clears your shell proxy vars, so under sudo pass --proxy explicitly,
-    or run: sudo GOXCTL_PROXY=$https_proxy goxctl upgrade`, action, reason)
+    or run: sudo GOXCTL_PROXY=$https_proxy goxctl upgrade`, action, reason, proxyLine)
 }
 
 // httpGetf 下载 url 并在网络错误时给出友好提示；action 用于错误描述（如 "download foo.tar.gz"）。

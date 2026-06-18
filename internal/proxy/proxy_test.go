@@ -41,3 +41,22 @@ func TestApply_NoneKeepsExisting(t *testing.T) {
 	assert.Equal(t, "http://existing:9", os.Getenv("HTTPS_PROXY"))
 	assert.Equal(t, "http://existing:9", os.Getenv("HTTP_PROXY"))
 }
+
+func TestRedact(t *testing.T) {
+	// 无凭据：原样返回
+	assert.Equal(t, "http://127.0.0.1:7890", redact("http://127.0.0.1:7890"))
+	// 带 user:password：隐去 userinfo
+	assert.Equal(t, "http://***@host:8080", redact("http://user:secret@host:8080"))
+	// 仅 token 作 user：同样隐去
+	assert.Equal(t, "http://***@host:8080", redact("http://tok@host:8080"))
+}
+
+func TestInUse(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("http_proxy", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("HTTPS_PROXY", "http://user:secret@host:1")
+
+	// 返回脱敏后的生效代理
+	assert.Equal(t, "http://***@host:1", InUse())
+}
